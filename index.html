@@ -138,7 +138,7 @@
     <div class="pw-error" id="pw-error"></div>
   </div>
 </div>
-<div class="version-banner">v2026-08-13-10 (한글 숫자 금액 인식 추가)</div>
+<div class="version-banner">v2026-08-13-11 (날짜 낱말 오인식 버그 수정)</div>
 <div id="backup-reminder-banner" style="display:none; position:sticky; top:22px; z-index:49; background:#D9A441; color:#24382E; text-align:center; font-size:0.76rem; padding:0.5rem 0.7rem; font-weight:700; align-items:center; justify-content:center; gap:0.6rem; flex-wrap:wrap;">
   <span id="backup-reminder-text"></span>
   <button type="button" id="backup-reminder-btn" style="border:1.5px solid #24382E; background:#fff; color:#24382E; border-radius:999px; padding:0.25rem 0.8rem; font-size:0.74rem; font-weight:700; cursor:pointer; font-family:inherit;">지금 백업</button>
@@ -620,11 +620,14 @@ function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate()+n); return
 
 function parseDate(text) {
   const today = new Date();
-  if (/그제|그저께/.test(text)) return fmtDate(addDays(today,-2));
-  if (/어제/.test(text)) return fmtDate(addDays(today,-1));
-  if (/오늘/.test(text)) return fmtDate(today);
+  // '오늘땄데이'처럼 다른 단어 속에 낱말이 섞여 있을 때는 날짜로 착각하지 않도록 경계를 둠
+  if (/(?<![가-힣])(그제|그저께)(?![가-힣])/.test(text)) return fmtDate(addDays(today,-2));
+  if (/(?<![가-힣])어제(?![가-힣])/.test(text)) return fmtDate(addDays(today,-1));
+  const ymd = text.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+  if (ymd) return fmtDate(new Date(parseInt(ymd[1],10), parseInt(ymd[2],10)-1, parseInt(ymd[3],10)));
   const m = text.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
   if (m) { const d = new Date(today.getFullYear(), parseInt(m[1],10)-1, parseInt(m[2],10)); return fmtDate(d); }
+  if (/(?<![가-힣])오늘(?![가-힣])/.test(text)) return fmtDate(today);
   return fmtDate(today);
 }
 const KOR_NUM_MAP = { '일':1, '이':2, '삼':3, '사':4, '오':5, '육':6, '륙':6, '칠':7, '팔':8, '구':9, '십':10 };
@@ -660,13 +663,18 @@ function parseCategory(text) {
 // 지출내역(메모)에는 날짜·금액 표현이 남지 않도록, 인식해서 빼낸 부분은 원문에서 지워줌
 function stripDateAndAmount(text) {
   let out = text;
-  out = out.replace(/그저께|그제/, '');
-  out = out.replace(/어제/, '');
-  out = out.replace(/오늘/, '');
-  out = out.replace(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/, '');
+  let removedDate = false;
+  // '오늘땄데이'처럼 날짜 낱말이 다른 단어 속에 들어있을 때는 건드리지 않도록, 앞뒤가 한글로 이어지지 않을 때만 날짜로 인식
+  const dateWordMatch = out.match(/(?<![가-힣])(그저께|그제|어제|오늘)(?![가-힣])/);
+  if (dateWordMatch) { out = out.replace(dateWordMatch[0], ''); removedDate = true; }
+  else {
+    const ymdMatch = out.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/) || out.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+    if (ymdMatch) { out = out.replace(ymdMatch[0], ''); removedDate = true; }
+  }
   const { matchText } = parseAmountDetailed(text);
   if (matchText) out = out.replace(matchText, '');
-  out = out.replace(/^\s*(에는|엔|에|도|는|은)?\s*/, '');
+  // 날짜를 실제로 지웠을 때만 앞에 남은 조사를 정리 (아니면 '에어호스'가 '어호스'로 잘못 잘림)
+  if (removedDate) out = out.replace(/^\s*(에는|엔|에|도|는|은)?\s*/, '');
   out = out.replace(/\s{2,}/g, ' ').trim();
   return out;
 }
