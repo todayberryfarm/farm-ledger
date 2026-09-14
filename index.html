@@ -138,7 +138,7 @@
     <div class="pw-error" id="pw-error"></div>
   </div>
 </div>
-<div class="version-banner">v2026-08-13-11 (날짜 낱말 오인식 버그 수정)</div>
+<div class="version-banner">v2026-08-13-12 (만/천/백/십 이어지는 금액 인식 수정)</div>
 <div id="backup-reminder-banner" style="display:none; position:sticky; top:22px; z-index:49; background:#D9A441; color:#24382E; text-align:center; font-size:0.76rem; padding:0.5rem 0.7rem; font-weight:700; align-items:center; justify-content:center; gap:0.6rem; flex-wrap:wrap;">
   <span id="backup-reminder-text"></span>
   <button type="button" id="backup-reminder-btn" style="border:1.5px solid #24382E; background:#fff; color:#24382E; border-radius:999px; padding:0.25rem 0.8rem; font-size:0.74rem; font-weight:700; cursor:pointer; font-family:inherit;">지금 백업</button>
@@ -630,24 +630,27 @@ function parseDate(text) {
   if (/(?<![가-힣])오늘(?![가-힣])/.test(text)) return fmtDate(today);
   return fmtDate(today);
 }
-const KOR_NUM_MAP = { '일':1, '이':2, '삼':3, '사':4, '오':5, '육':6, '륙':6, '칠':7, '팔':8, '구':9, '십':10 };
+const KOR_NUM_MAP = { '일':1, '이':2, '삼':3, '사':4, '오':5, '육':6, '륙':6, '칠':7, '팔':8, '구':9, '십':10, '이십':20, '삼십':30, '사십':40, '오십':50, '육십':60, '칠십':70, '팔십':80, '구십':90 };
 function korToNum(s) {
   if (s === undefined) return null;
   if (/^\d+$/.test(s)) return parseInt(s, 10);
   return KOR_NUM_MAP[s] !== undefined ? KOR_NUM_MAP[s] : null;
 }
 // 금액을 인식해서 { amount, matchText(원문에서 실제 매칭된 부분) }로 돌려줌
-// "12000원" 같은 숫자뿐 아니라 "오천원", "이만원", "만원", "만이천원" 같은 한글 숫자 표현도 알아들음
+// "12000원" 같은 숫자뿐 아니라 "오천원", "이만원", "만원", "이만천육백원"처럼 만/천/백/십이 이어지는 한글 숫자도 알아들음
 function parseAmountDetailed(text) {
-  const t = text.replace(/,/g, '');
-  const numWord = '(?:\\d+|일|이|삼|사|오|육|륙|칠|팔|구|십)';
-  const re = new RegExp(`(?:(${numWord})?만)?\\s*(?:(${numWord})?천)?\\s*원`);
+  const t = text.replace(/,/g, '').replace(/\s+/g, ' ');
+  const numWord = '(?:\\d+|이십|삼십|사십|오십|육십|칠십|팔십|구십|일|이|삼|사|오|육|륙|칠|팔|구|십)';
+  const re = new RegExp(`(?:(${numWord})?\\s*(만))?\\s*(?:(${numWord})?\\s*(천))?\\s*(?:(${numWord})?\\s*(백))?\\s*(?:(${numWord})?\\s*(십))?\\s*원`);
   const m = t.match(re);
-  if (m && /만|천/.test(m[0])) {
-    const hasMan = /만/.test(m[0]), hasCheon = /천/.test(m[0]);
-    const manPart = hasMan ? (korToNum(m[1]) ?? 1) : 0;
-    const cheonPart = hasCheon ? (korToNum(m[2]) ?? 1) : 0;
-    if (manPart || cheonPart) return { amount: manPart * 10000 + cheonPart * 1000, matchText: m[0] };
+  if (m && (m[2] || m[4] || m[6] || m[8])) {
+    const manPart = m[2] ? (korToNum(m[1]) ?? 1) : 0;
+    const cheonPart = m[4] ? (korToNum(m[3]) ?? 1) : 0;
+    const baekPart = m[6] ? (korToNum(m[5]) ?? 1) : 0;
+    const sipPart = m[8] ? (korToNum(m[7]) ?? 1) : 0;
+    if (manPart || cheonPart || baekPart || sipPart) {
+      return { amount: manPart * 10000 + cheonPart * 1000 + baekPart * 100 + sipPart * 10, matchText: m[0] };
+    }
   }
   const m2 = t.match(/(\d+)\s*원/);
   if (m2) return { amount: parseInt(m2[1], 10), matchText: m2[0] };
