@@ -138,7 +138,7 @@
     <div class="pw-error" id="pw-error"></div>
   </div>
 </div>
-<div class="version-banner">v2026-08-13-14 (구글드라이브 자동백업 추가)</div>
+<div class="version-banner">v2026-08-13-15 (특이사항 메모 칸 추가)</div>
 <div id="backup-reminder-banner" style="display:none; position:sticky; top:22px; z-index:49; background:#D9A441; color:#24382E; text-align:center; font-size:0.76rem; padding:0.5rem 0.7rem; font-weight:700; align-items:center; justify-content:center; gap:0.6rem; flex-wrap:wrap;">
   <span id="backup-reminder-text"></span>
   <button type="button" id="backup-reminder-btn" style="border:1.5px solid #24382E; background:#fff; color:#24382E; border-radius:999px; padding:0.25rem 0.8rem; font-size:0.74rem; font-weight:700; cursor:pointer; font-family:inherit;">지금 백업</button>
@@ -252,6 +252,10 @@
     <div class="cf-row">
       <label class="field-label">항목</label>
       <select id="c-category"></select>
+    </div>
+    <div class="cf-row">
+      <label class="field-label">특이사항 (선택)</label>
+      <input type="text" id="c-note" placeholder="예: 세금계산서 받음">
     </div>
     <div class="confirm-btns">
       <button class="btn-cancel" id="c-cancel">취소</button>
@@ -852,6 +856,7 @@ function openNewConfirm(text) {
   const amt = parseAmount(text);
   $('c-amount').value = amt !== null ? amt : '';
   $('c-category').value = parseCategory(text);
+  $('c-note').value = '';
   $('c-save').textContent = '장부에 기록';
   $('overlay').classList.add('show');
 }
@@ -864,6 +869,7 @@ function openEditConfirm(id) {
   $('c-date').value = e.date;
   $('c-amount').value = e.amount;
   $('c-category').value = e.category;
+  $('c-note').value = e.note || '';
   $('c-save').textContent = '수정 저장';
   $('overlay').classList.add('show');
 }
@@ -874,6 +880,7 @@ $('c-save').addEventListener('click', async () => {
   const amount = parseInt($('c-amount').value, 10);
   const category = $('c-category').value;
   const memo = $('c-memo').value.trim();
+  const note = $('c-note').value.trim();
   if (!date || !amount || amount <= 0) { $('c-amount').style.borderColor = 'var(--berry)'; return; }
   const btn = $('c-save');
   btn.disabled = true; btn.textContent = '저장 중...';
@@ -881,9 +888,9 @@ $('c-save').addEventListener('click', async () => {
   let prevEntries = entries;
   const isNew = !editingId;
   if (editingId) {
-    entries = entries.map(e => e.id === editingId ? { ...e, date, amount, category, memo } : e);
+    entries = entries.map(e => e.id === editingId ? { ...e, date, amount, category, memo, note } : e);
   } else {
-    entries = [{ id: Date.now().toString(36) + Math.random().toString(36).slice(2,7), date, amount, category, memo, createdAt: Date.now() }, ...entries];
+    entries = [{ id: Date.now().toString(36) + Math.random().toString(36).slice(2,7), date, amount, category, memo, note, createdAt: Date.now() }, ...entries];
   }
   render();
   const ok = await saveEntries();
@@ -1305,7 +1312,7 @@ $('export-btn').addEventListener('click', () => {
   if (entries.length === 0) { showToast('아직 기록이 없어요.'); return; }
   if (typeof XLSX === 'undefined') { showToast('엑셀 기능을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.'); return; }
   const sorted = entries.slice().sort((a,b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
-  const rawData = sorted.map(e => ({ 날짜: e.date, 항목: e.category, 금액: e.amount, 메모: e.memo || '' }));
+  const rawData = sorted.map(e => ({ 날짜: e.date, 항목: e.category, 금액: e.amount, 지출내역: e.memo || '', 특이사항: e.note || '' }));
   const grandTotal = entries.reduce((s,e) => s+e.amount, 0);
   const monthTotals = {};
   entries.forEach(e => { const ym = e.date.slice(0,7); monthTotals[ym] = (monthTotals[ym]||0) + e.amount; });
@@ -1403,7 +1410,7 @@ function render() {
   const catFilter = $('filter-category').value;
   const filtered = entries.filter(e =>
     (catFilter === '전체' || e.category === catFilter) &&
-    (search === '' || (e.memo || '').includes(search) || (e.category || '').includes(search))
+    (search === '' || (e.memo || '').includes(search) || (e.category || '').includes(search) || (e.note || '').includes(search))
   );
 
   const container = $('entries');
@@ -1435,6 +1442,7 @@ function render() {
         <span class="amt">${fmtWon(e.amount)}</span>
         <button class="icon-btn edit-btn" data-id="${e.id}">수정</button>
         <button class="icon-btn del-btn" data-id="${e.id}">✕</button>
+        ${e.note ? `<div style="flex-basis:100%; font-size:0.78rem; color:var(--ink-soft); padding-left:0.1rem;">📌 ${escapeHtml(e.note)}</div>` : ''}
       </div>
     `).join('');
     return `<div class="day-group"><div class="day-heading">${fmtDay(date)} <span class="dsum">${fmtWon(daySum)}</span></div>${items}</div>`;
